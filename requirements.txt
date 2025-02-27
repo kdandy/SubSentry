@@ -1,6 +1,6 @@
 requests
 dnspython
-whois
+python-whois
 pandas
 scikit-learn
-sublist3r
+git+https://github.com/aboul3la/Sublist3r.git

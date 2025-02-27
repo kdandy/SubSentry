@@ -13,25 +13,39 @@ import sublist3r  # Import Sublist3r directly
 def get_subdomains_ssl(domain):
     print(f"Fetching subdomains from SSL database (crt.sh) for {domain}...")
     url = f"https://crt.sh/?q={domain}&output=json"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            try:
-                json_data = response.json()
-                subdomains = list(set(entry["name_value"] for entry in json_data))
-                return subdomains
-            except ValueError:
-                print("⚠️ Unable to parse JSON from crt.sh!")
-    except Exception as e:
-        print(f"Error: {e}")
+    
+    for attempt in range(3):  # Retry 3 times
+        try:
+            response = requests.get(url, timeout=20)  # Increased timeout
+            if response.status_code == 200:
+                try:
+                    json_data = response.json()
+                    subdomains = list(set(entry["name_value"] for entry in json_data))
+                    return subdomains
+                except ValueError:
+                    print("⚠️ Unable to parse JSON from crt.sh!")
+        except requests.exceptions.Timeout:
+            print(f"⚠️ crt.sh request timed out. Retrying... ({attempt+1}/3)")
+        except Exception as e:
+            print(f"Error: {e}")
+    
     return []
 
 # Function to fetch subdomains using Sublist3r
 def get_subdomains(domain):
     print(f"Fetching subdomains for {domain} using Sublist3r...")
     try:
-        subdomains = sublist3r.main(domain, 40, None, None, None, None, False, False, False)
-        return subdomains if subdomains else []
+        subdomains = sublist3r.main(
+            domain=domain, 
+            threads=40, 
+            savefile=None, 
+            ports=None, 
+            silent=True, 
+            verbose=False, 
+            enable_bruteforce=False,
+            engines=['VirusTotal', 'Google', 'Yahoo', 'Bing', 'Ask', 'Netcraft']
+        )
+        return subdomains if isinstance(subdomains, list) else []
     except Exception as e:
         print(f"Error: {e}")
         return []
@@ -58,10 +72,19 @@ def check_takeover(subdomain):
 # Function to perform WHOIS lookup on a subdomain
 def whois_lookup(domain):
     try:
+        print(f"Performing WHOIS lookup for {domain}...")
         domain_info = whois.whois(domain)
         return "Available" if domain_info.get("status") is None else "Registered"
     except Exception:
-        return "Unknown"
+        print("⚠️ WHOIS lookup failed. Trying alternative API...")
+        try:
+            response = requests.get(f"https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey=YOUR_API_KEY&domainName={domain}&outputFormat=json", timeout=10)
+            if response.status_code == 200:
+                whois_data = response.json()
+                return "Available" if "available" in whois_data else "Registered"
+        except Exception:
+            pass  # If alternative API also fails, return "Unknown"
+    return "Unknown"
 
 # Function to check if a subdomain is protected by Cloudflare
 def check_cloudflare(subdomain):
@@ -79,72 +102,42 @@ def train_ai_model(data):
     if data.empty:
         print("⚠️ No subdomains found, skipping AI training.")
         return None, None
-
     print("Training AI model for subdomain takeover prediction...")
-
-    # Encode string labels into numeric values
     encoder = LabelEncoder()
     data["Status_Encoded"] = encoder.fit_transform(data["Status"])
-
-    # Ensure numeric values
     mapping = {"Protected by Cloudflare": 0, "Not Cloudflare": 1}
     data["Cloudflare_Protection"] = data["Cloudflare_Protection"].map(mapping).fillna(2).astype(int)
-    
     whois_mapping = {"Available": 1, "Registered": 0, "Unknown": 2}
     data["WHOIS_Status"] = data["WHOIS_Status"].map(whois_mapping).fillna(2).astype(int)
-
-    # Split dataset into training and testing sets
     X = data[["Cloudflare_Protection", "WHOIS_Status"]]
     y = data["Status_Encoded"]
-
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Train AI model
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
-
-    # Evaluate model accuracy
     accuracy = model.score(X_test, y_test)
     print(f"✅ Model Accuracy: {accuracy:.2f}")
-
     return model, encoder
 
-# Get target domain from user input
-target_domain = input("Enter target domain (e.g., example.com): ")
-
-# Retrieve subdomains from multiple sources
-subdomains_sublister = get_subdomains(target_domain)
-subdomains_ssl = get_subdomains_ssl(target_domain)
-subdomains = list(set(subdomains_sublister + subdomains_ssl))
-
-# Check if subdomains were found
-if not subdomains:
-    print("⚠️ No subdomains found for this domain.")
-    exit()
-
-# Check subdomain status
-results = []
-for sub in subdomains:
-    time.sleep(1)  # Avoid rate-limiting
-    status = check_takeover(sub)
-    whois_status = whois_lookup(sub)
-    cloudflare_status = check_cloudflare(sub)
-    results.append({"Subdomain": sub, "Status": status, "WHOIS_Status": whois_status, "Cloudflare_Protection": cloudflare_status})
-
-# Convert results to DataFrame
-df_results = pd.DataFrame(results)
-
-# Train AI Model
-ai_model, label_encoder = train_ai_model(df_results)
-
-# AI Prediction on subdomain takeover risk
-if ai_model:
-    df_results["AI_Prediction"] = ai_model.predict(df_results[["Cloudflare_Protection", "WHOIS_Status"]])
-
-# Display results in a table
-import ace_tools as tools
-tools.display_dataframe_to_user(name="Subdomain Takeover Detection", dataframe=df_results)
-
-# Save results to CSV file
-df_results.to_csv("subsentry_results.csv", index=False)
-print("\n✅ Results saved in 'subsentry_results.csv'")
+if __name__ == "__main__":
+    target_domain = input("Enter target domain (e.g., example.com): ")
+    subdomains_sublister = get_subdomains(target_domain)
+    subdomains_ssl = get_subdomains_ssl(target_domain)
+    subdomains = list(set(subdomains_sublister + subdomains_ssl))
+    if not subdomains:
+        print("⚠️ No subdomains found for this domain.")
+        exit()
+    results = []
+    for sub in subdomains:
+        time.sleep(1)
+        status = check_takeover(sub)
+        whois_status = whois_lookup(sub)
+        cloudflare_status = check_cloudflare(sub)
+        results.append({"Subdomain": sub, "Status": status, "WHOIS_Status": whois_status, "Cloudflare_Protection": cloudflare_status})
+    df_results = pd.DataFrame(results)
+    ai_model, label_encoder = train_ai_model(df_results)
+    if ai_model:
+        df_results["AI_Prediction"] = ai_model.predict(df_results[["Cloudflare_Protection", "WHOIS_Status"]])
+    print("\n🔎 Subdomain Takeover Detection Results:\n")
+    print(df_results.to_string(index=False))
+    df_results.to_csv("subsentry_results.csv", index=False)
+    print("\n✅ Results saved in 'subsentry_results.csv'")

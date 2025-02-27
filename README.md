@@ -19,6 +19,16 @@ This tool automates the detection of vulnerable subdomains that can be taken ove
 ### Install Dependencies
 Clone the repository and install dependencies:
 ```sh
+# Clone the repository
+git clone https://github.com/yourusername/SubSentry.git
+cd SubSentry
+
+# Create a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # For macOS/Linux
+.venv\Scripts\activate    # For Windows
+
+# Install required dependencies
 pip install -r requirements.txt
 ```
 If `sublist3r` fails to install, try manually installing it:
