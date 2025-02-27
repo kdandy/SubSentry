@@ -1,4 +1,4 @@
-# 🚀 AI-Powered Subdomain Takeover Detector
+# 🚀 Automated Subdomain Takeover Detector
 
 ## 🔍 Overview
 This tool automates the detection of vulnerable subdomains that can be taken over using AI-driven analysis. It performs subdomain enumeration, CNAME checking, WHOIS lookup, Cloudflare protection analysis, and uses machine learning to predict potential takeovers.
