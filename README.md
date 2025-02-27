@@ -20,7 +20,7 @@ This tool automates the detection of vulnerable subdomains that can be taken ove
 Clone the repository and install dependencies:
 ```sh
 # Clone the repository
-git clone https://github.com/yourusername/SubSentry.git
+git clone https://github.com/kdandy/SubSentry.git
 cd SubSentry
 
 # Create a virtual environment
