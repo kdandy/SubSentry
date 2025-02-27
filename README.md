@@ -41,7 +41,7 @@ Run the script and enter a target domain:
 ```sh
 python SubSentry.py
 ```
-Results will be saved in `subdomain_takeover_ai_results.csv`.
+Results will be saved in `subsentry_results.csv`.
 
 ## 📊 Example Output
 | 🌐 Subdomain       | ⚠️ Status             | 🔍 WHOIS_Status | 🛡 Cloudflare_Protection | 🤖 AI_Prediction        |
